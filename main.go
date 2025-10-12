@@ -6,14 +6,17 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+
+	"github.com/AdarshN-1324/load_balancer-reverse_proxy/server_conf"
+	"github.com/joho/godotenv"
 )
 
-//at init create a servers loader
-
-type servers struct {
-	url   string
-	count int
+func init() {
+	godotenv.Load()
+	server_conf.Loadservers()
 }
+
+//at init create a servers loader
 
 func main() {
 	port := ":3001"
@@ -28,12 +31,13 @@ func ProxyRequestHandler(w http.ResponseWriter, r *http.Request) {
 	case "/ping":
 		Ping(w, r)
 	default:
-		var s = []servers{{
-			url: "http://localhost:8080",
-		}, {url: "http://localhost:8081"}, {url: "http://localhost:8082"}}
-		// logic's
-		proxy := Proxy(s[0].url)
-		proxy.ServeHTTP(w, r)
+		// logic part round robin
+		current := server_conf.Servers.GetCurrent()
+		r.Host = server_conf.Servers.Urls[current].Url.Host
+		r.URL.Host = server_conf.Servers.Urls[current].Url.Host
+
+		fmt.Println("current", current, "requests", server_conf.Servers.Urls[current].Requests)
+		server_conf.Servers.Urls[current].Proxy.ServeHTTP(w, r)
 	}
 }
 
@@ -41,11 +45,9 @@ func Ping(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("PONG"))
 }
 
-func Proxy(server string) *httputil.ReverseProxy {
-	url, err := url.Parse(server)
-	if err != nil {
-		fmt.Println("errorr", err.Error())
-		return nil
-	}
+func Proxy(url *url.URL) *httputil.ReverseProxy {
+	// url, _ := url.Parse(s_url)
+	// fmt.Println("active status", server.Active)
+	// fmt.Println("url", server.Url.String())
 	return httputil.NewSingleHostReverseProxy(url)
 }
