@@ -3,7 +3,6 @@ package testingservers
 import (
 	"fmt"
 	"io"
-	"math/rand/v2"
 	"net/http"
 	"testing"
 	"time"
@@ -16,12 +15,13 @@ func Test_LoadBalancer(t *testing.T) {
 	}
 }
 
-var current int
+// var current int
 
 func Test_api(t *testing.T) {
-	var urls = []string{"/hello", "/api/ping"}
-	current := rand.IntN(2)
-	res, err := http.Get("http://localhost:3001" + urls[current])
+	// var urls = []string{"/hello", "/api/math/add"}
+	// current := rand.IntN(2)
+	// + urls[current]
+	res, err := http.Get("http://localhost:3001/api/math/add")
 	if err != nil {
 		fmt.Println("error", err.Error())
 		return
