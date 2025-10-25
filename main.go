@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -16,34 +15,38 @@ func init() {
 	godotenv.Load()
 }
 
-// at init create a servers loader
 var mode string
 
 func main() {
 	mode = os.Getenv("mode")
+
 	run_mode := ""
+
 	switch mode {
 	case "WRR":
 		run_mode = "Weighted Round robin"
 	default:
 		run_mode = "Round robin"
 	}
+
 	port := ":3001"
-	fmt.Printf("Welcome to the simple Load balancer running in %s mode...\nListening and serving HTTP on %s\n", run_mode, port)
+	log.Printf("Welcome to the simple Load balancer running in %s mode...\nListening and serving HTTP on %s\n", run_mode, port)
+
 	serverpool := server_conf.Loadservers()
+
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ProxyRequestHandler(w, r, serverpool) // Pass the pool to the handler
 	})
-	log.Print(http.ListenAndServe(port, http.HandlerFunc(handler)))
+
+	log.Println(http.ListenAndServe(port, http.HandlerFunc(handler)))
 }
 
 func Handlerfunc(w http.ResponseWriter, r *http.Request) {
 
 }
 
-// this is where the main process is done passing the url to the server
 func ProxyRequestHandler(w http.ResponseWriter, r *http.Request, serverpool *server_conf.Server) {
-	// write this server paths and forward them as needed
+
 	switch r.URL.Path {
 	case "/ping":
 		Ping(w, r)
@@ -55,9 +58,15 @@ func ProxyRequestHandler(w http.ResponseWriter, r *http.Request, serverpool *ser
 		default:
 			current = serverpool.RRGetCurrent()
 		}
-		r.Host = serverpool.Urls[current].Backend.Host
-		r.URL.Host = serverpool.Urls[current].Backend.Host
-		serverpool.Urls[current].Proxy.ServeHTTP(w, r)
+		if current < 0 {
+			log.Println("all the servers are in-active")
+			w.WriteHeader(http.StatusBadGateway)
+			w.Write([]byte("Bad Gateway Please try again"))
+			return
+		}
+		r.Host = serverpool.Backends[current].Url.Host
+		r.URL.Host = serverpool.Backends[current].Url.Host
+		serverpool.Backends[current].Proxy.ServeHTTP(w, r)
 	}
 }
 
