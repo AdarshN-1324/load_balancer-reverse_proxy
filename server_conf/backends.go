@@ -2,7 +2,6 @@ package server_conf
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -21,20 +20,19 @@ type Backend struct {
 	Proxy          *httputil.ReverseProxy
 	Requests       atomic.Uint64 // if using WRR reset to 0 when requests meet count
 	Total_Requests atomic.Uint64
-	Active         bool
-	Mux            sync.Mutex
-	weights        int
+	Active         atomic.Bool
+	// Mux            sync.Mutex
+	weights int
 }
 
 type Server struct {
-	Backends       []Backend
-	Inactive_count int
-	Current        int //to move for the next (round robin) /store the current index
-	// total   int //round robin is a bit difficult when you look for active one
-	Mux sync.Mutex
+	Backends []Backend
+	Current  int //to move for the next (round robin) /store the current index
+	Mux      sync.Mutex
 }
 
 func Loadservers() *Server {
+
 	var Servers Server
 	servers := os.Getenv("servers")
 	list := strings.Split(servers, ",")
@@ -44,21 +42,26 @@ func Loadservers() *Server {
 
 	Servers.Backends = make([]Backend, len(list))
 
+	var wg sync.WaitGroup
+
 	for i := range list {
 
-		Servers.Backends[i].Mux = sync.Mutex{}
+		// Servers.Backends[i].Mux = sync.Mutex{}
 		url, proxy := serverpool(list[i])
 
 		Servers.Backends[i].Url, Servers.Backends[i].Proxy = url, proxy
 
-		go Servers.Backends[i].CheckActive()
+		wg.Add(1)
+		go Servers.Backends[i].CheckActive(&wg, &Servers)
 
 		weight, err := strconv.ParseFloat(w_list[i], 64)
 		if err != nil {
-			fmt.Println("error", err.Error())
+			log.Println("error", err.Error())
 		}
 		Servers.Backends[i].weights = int(weight * 10)
 	}
+
+	wg.Wait()
 
 	return &Servers
 	// Servers.total = len(Servers.Urls)
@@ -67,20 +70,27 @@ func Loadservers() *Server {
 func serverpool(server_url string) (*url.URL, *httputil.ReverseProxy) {
 
 	url, err := url.Parse(server_url)
+
 	if err != nil {
-		fmt.Println("errorr", err.Error())
+		log.Println("error", err.Error())
 		return nil, nil
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(url)
+
 	return url, proxy
 
 }
 
-func (backend *Backend) CheckActive() {
+func (backend *Backend) CheckActive(wg *sync.WaitGroup, serverpool *Server) {
+	defer wg.Done()
+
+	// defer backend.Mux.Unlock()
+	// backend.Mux.Lock()
+
 	path := backend.Url.String() + os.Getenv("active_path")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 	defer cancel()
 
 	client := http.Client{}
@@ -90,13 +100,14 @@ func (backend *Backend) CheckActive() {
 		return
 	}
 
-	res, err := client.Do(req)
+	_, err = client.Do(req)
 	if err != nil {
 		log.Printf("Server Ping Error %s", err.Error())
+		backend.Active.Store(false)
 		return
 	}
 
-	backend.Active = res.StatusCode == 200
+	backend.Active.Store(true)
 }
 
 func (backend *Backend) Increment() {
@@ -110,23 +121,27 @@ func (backend *Backend) Increment() {
 
 /*
 write a recursive function to get a current active one in case a server is down  and i need to keep on checking if the next one is in active then increment
+a loop with a simple math solves the active backend issue
 */
 func (server *Server) GetActiveBackend(current int) int {
 
-	if server.Inactive_count == len(server.Backends)-1 {
-		return -1
-	}
-	if server.Backends[current].Active {
+	backend_active := server.Backends[server.Current].Active.Load()
+	if backend_active {
 		server.Backends[server.Current].Increment()
-		return current
+		return server.Current
 	}
 
-	server.Inactive_count++
-
-	if current >= len(server.Backends) {
-		current = 0
+	for i := 0; i < len(server.Backends); i++ {
+		idx := (server.Current + i) % len(server.Backends)
+		backend_active = server.Backends[idx].Active.Load()
+		if backend_active {
+			server.Current = idx
+			server.Backends[server.Current].Increment()
+			return server.Current
+		}
 	}
-	return server.GetActiveBackend(current + 1)
+
+	return -1
 }
 
 func (server *Server) RRGetCurrent() int {
@@ -138,9 +153,8 @@ func (server *Server) RRGetCurrent() int {
 	if server.Current >= len(server.Backends) {
 		server.Current = 0
 	}
-	server.Current = server.GetActiveBackend(server.Current)
 
-	return server.Current
+	return server.GetActiveBackend(server.Current)
 }
 
 func (server *Server) WrrGetCurrent() int {
@@ -155,8 +169,6 @@ func (server *Server) WrrGetCurrent() int {
 			server.Current = 0
 		}
 	}
-
-	// once incremented look for active/inactive and then icrement again
 
 	return server.GetActiveBackend(server.Current)
 }

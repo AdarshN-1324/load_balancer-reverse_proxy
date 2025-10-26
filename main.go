@@ -1,13 +1,17 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
 
 	"github.com/AdarshN-1324/load_balancer-reverse_proxy/server_conf"
+	"github.com/AdarshN-1324/load_balancer-reverse_proxy/worker"
 	"github.com/joho/godotenv"
 )
 
@@ -15,10 +19,9 @@ func init() {
 	godotenv.Load()
 }
 
-var mode string
-
 func main() {
-	mode = os.Getenv("mode")
+
+	mode := os.Getenv("mode")
 
 	run_mode := ""
 
@@ -34,23 +37,61 @@ func main() {
 
 	serverpool := server_conf.Loadservers()
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ProxyRequestHandler(w, r, serverpool) // Pass the pool to the handler
-	})
+	server := http.Server{
+		Addr: port,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ProxyRequestHandler(w, r, serverpool, mode) // Pass the pool to the handler
 
-	log.Println(http.ListenAndServe(port, http.HandlerFunc(handler)))
+		}),
+	}
+
+	var wg sync.WaitGroup
+
+	// graceful shutdown
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGINT)
+	wg.Add(1)
+	go func() {
+
+		defer wg.Done()
+		<-shutdown
+
+		Timeout := 5 * time.Second
+		log.Printf("Received shutdown signal. Commencing graceful shutdown with a %s timeout...", Timeout)
+
+		ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+		defer cancel()
+
+		// Attempt to gracefully shut down the server
+		log.Println("Waiting for active requests to complete...")
+		if err := server.Shutdown(ctx); err != nil {
+			log.Fatalf("server forced to shutdown with error %v", err)
+		}
+
+		log.Println("Server shutdown successful.")
+
+	}()
+
+	go worker.CheckBackend(serverpool, 1)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server ListenAndServe error: %v", err)
+		}
+	}()
+
+	wg.Wait()
 }
 
-func Handlerfunc(w http.ResponseWriter, r *http.Request) {
-
-}
-
-func ProxyRequestHandler(w http.ResponseWriter, r *http.Request, serverpool *server_conf.Server) {
+func ProxyRequestHandler(w http.ResponseWriter, r *http.Request, serverpool *server_conf.Server, mode string) {
 
 	switch r.URL.Path {
 	case "/ping":
 		Ping(w, r)
 	default:
+
 		var current int
 		switch mode {
 		case "WRR":
@@ -74,9 +115,9 @@ func Ping(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("PONG"))
 }
 
-func Proxy(url *url.URL) *httputil.ReverseProxy {
-	// url, _ := url.Parse(s_url)
-	// fmt.Println("active status", server.Active)
-	// fmt.Println("url", server.Url.String())
-	return httputil.NewSingleHostReverseProxy(url)
-}
+// func Proxy(url *url.URL) *httputil.ReverseProxy {
+// 	// url, _ := url.Parse(s_url)
+// 	// fmt.Println("active status", server.Active)
+// 	// fmt.Println("url", server.Url.String())
+// 	return httputil.NewSingleHostReverseProxy(url)
+// }

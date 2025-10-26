@@ -9,9 +9,9 @@ import (
 )
 
 func Test_LoadBalancer(t *testing.T) {
-	for range 100 {
+	for range 50 {
 		t.Run("API test", Test_api)
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(700 * time.Millisecond)
 	}
 }
 

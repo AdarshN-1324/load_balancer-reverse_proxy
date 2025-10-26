@@ -1,2 +1,4 @@
-1 a worker to actively check if the server gets backup 
-2 logs storing with ip ,time ,method and url path with timetaken 
+1 a worker to actively check if the server gets backup --done  
+2 graceful shutdown --done 
+3 logs storing with ip ,time ,method and url path with timetaken 
+4 a bug where some requests are skipped lock can help in this situation --done
