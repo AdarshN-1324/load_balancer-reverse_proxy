@@ -42,6 +42,9 @@ The application is configured using environment variables. Create a `.env` file 
 # A comma-separated list of backend server URLs
 servers=http://localhost:8081,http://localhost:8082,http://localhost:8083
 
+# The port for the load balancer to listen on
+port=3001
+
 # The load balancing mode. Options: "RR" (Round Robin) or "WRR" (Weighted Round Robin)
 mode=WRR
 
@@ -110,4 +113,4 @@ curl http://localhost:3001/ping
 -   **Structured Logging**: Implement structured logging (e.g., using `slog` or `zerolog`) to make logs machine-readable and easier to parse, which fulfills the final item on the `todo.txt`.
 -   **Configuration from File**: Add support for loading configuration from a YAML or TOML file in addition to environment variables.
 -   **More Algorithms**: Implement other load balancing algorithms like Least Connections.
-
+- **rate limit**: Add a rate limiter to reduce DoS and Brute-force attacks

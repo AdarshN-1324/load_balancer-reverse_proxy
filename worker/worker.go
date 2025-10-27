@@ -8,7 +8,6 @@ import (
 )
 
 func CheckBackend(serverpool *server_conf.Server, timeout int) {
-
 	var wg sync.WaitGroup
 	for {
 		for i := range serverpool.Backends {

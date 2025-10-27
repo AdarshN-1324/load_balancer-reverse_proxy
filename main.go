@@ -32,7 +32,7 @@ func main() {
 		run_mode = "Round robin"
 	}
 
-	port := ":3001"
+	port := ":" + os.Getenv("port")
 	log.Printf("Welcome to the simple Load balancer running in %s mode...\nListening and serving HTTP on %s\n", run_mode, port)
 
 	serverpool := server_conf.Loadservers()
