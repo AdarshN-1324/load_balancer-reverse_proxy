@@ -1,7 +1,0 @@
-1. [x] A worker to actively check if the server gets back up.
-2. [x] Graceful shutdown.
-3. [x] A bug where some requests are skipped (lock can help in this situation).
-
-Future ideas:
-* logs storing with ip ,time ,method and url path with timetaken
-* other round balancer methods (e.g., Least Connections)

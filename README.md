@@ -114,3 +114,4 @@ curl http://localhost:3001/ping
 -   **Configuration from File**: Add support for loading configuration from a YAML or TOML file in addition to environment variables.
 -   **More Algorithms**: Implement other load balancing algorithms like Least Connections.
 - **rate limit**: Add a rate limiter to reduce DoS and Brute-force attacks
+-**Docker Setup**
